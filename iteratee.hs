@@ -41,7 +41,7 @@ enumWords (Done a) = pure $ Done a
 enumWords (GetC f) = loop ""
   where
     loop acc = GetC $ \c -> check acc c
-    check acc ' ' = pure <$> f acc
+    check acc ' ' = pure <$> f (reverse acc)
     check acc s = pure $ loop (s:acc)
 
 

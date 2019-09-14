@@ -40,8 +40,11 @@ enumWords :: (Monad m) => Enumeratee Char String m a
 enumWords (Done a) = pure $ Done a
 enumWords (GetC f) = loop ""
   where
-    loop :: String -> I Char m (I string m a)
-    loop acc = undefined
+    loop acc = GetC $ \c -> check acc c
+    check acc ' ' = pure <$> f acc
+    check acc s = pure $ loop (s:acc)
+
+
 
 -- infixr 1 .|
 -- (.|) :: (Monad m) => (I b m a -> w) -> I b m (I c m a) -> w

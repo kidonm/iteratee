@@ -1,9 +1,11 @@
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 import Control.Monad ((>=>), forever)
 import Data.Functor.Identity
+import Data.Char (isSpace)
 
 data Void
 
@@ -32,46 +34,53 @@ instance Monad m => Monad (I b m) where
   Done a >>= f = f a
   GetC f >>= g = GetC $ fmap (>>= g) . f
 
-readLnEnum :: Enumerator String IO a
-readLnEnum (GetC f) = readLn >>= f
-readLnEnum a = pure a
+run :: (Monad m) => [b] -> I (Maybe b) m a -> m a
+run _ (Done a) = pure a
+run (b:bs) (GetC f) = f (Just b) >>= run bs
+run [] (GetC f) = f Nothing >>= run []
+
+count :: (Monad m) => I (Maybe b) m Int
+count = go 0
+  where
+    go n = GetC $ return . \case
+      Just a -> go (n + 1)
+      Nothing -> pure $ n
 
 enumWords :: (Monad m) => Enumeratee Char String m a
 enumWords (Done a) = pure $ Done a
 enumWords (GetC f) = loop ""
   where
-    loop acc = GetC $ \c -> check acc c
+    loop acc = GetC $ check acc
     check acc ' ' = pure <$> f (reverse acc)
     check acc s = pure $ loop (s:acc)
 
+filterEnum :: (Monad m) => (b -> Bool) -> Enumeratee (Maybe b) (Maybe b) m a
+filterEnum pred (Done a) = pure $ Done a
+filterEnum pred (GetC f) = go
+  where
+    go = GetC inner
+    inner = \case
+      Just b -> if pred b then pure <$> f (Just b) else pure go
+      Nothing -> pure go
+
+takeEnum :: (Monad m) => Int -> Enumeratee b b m a
+takeEnum _ (Done a) = pure $ Done a
+takeEnum n (GetC f) = undefined
+  -- where
+  --   go :: Int -> I b m (I b m a)
+  --   go n
+  --     | n > 1 = GetC $ \b -> (f b) >>= _
+  --     | otherwise = undefined
+
+infixr 1 .|
+(.|) :: (Monad m) => (I b' m a -> w) -> I b m (I b' m a) -> w
+fi .| (Done i) = fi i
+fi .| (GetC f) = fi .| (GetC f)
+
+pair :: (Monad m) => I b m a -> I b m c -> I b m (a, c)
+pair (Done a) (Done c) = pure (a, c)
+pair (GetC fa) (GetC fc) = GetC $ \b -> pair <$> fa b <*> fc b
+pair (GetC fa) ic = GetC $ fmap (flip pair ic) . fa
+pair ia (GetC fc) = GetC $ fmap (pair ia) . fc
 
 
--- infixr 1 .|
--- (.|) :: (Monad m) => (I b m a -> w) -> I b m (I c m a) -> w
--- i .| ii = undefined
-
--- getLine0 :: Source IO String
--- getLine0 = liftSource readLn
-
--- getLines0 :: (Monad m) => I String m [String]
--- getLines0 = GetC $ \s -> s:getLines0
-
--- take0 :: (Monad m) => I String m [String]
--- take0 = undefined
---
--- pipe :: I b m a -> I a m c -> I b m c
--- pipe () () =
---
--- test = getLine0 `pipe` take0
-
--- I Void m [String]
-
--- eval :: (Monad m) => [b] -> I b m a -> m a
--- eval "" (GetC f) = f Nothing >>= eval ""
--- eval _ (Done a) = pure a
--- eval (s:ss) (GetC f) = f (Just s) >>= eval ss
-
--- test = eval "bla\nbla bla\n" i
-
--- i :: IPure (String, String)
--- i = (,) <$> getLine0 <*> getLine0
